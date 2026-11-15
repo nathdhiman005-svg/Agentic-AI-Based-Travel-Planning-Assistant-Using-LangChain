@@ -84,14 +84,61 @@ The project leverages **Neon Tech Serverless PostgreSQL** for both relational ca
 
 ---
 
-## 🚀 5. Getting Started & Installation
+## 🦙 5. Ollama Installation & Local Model Setup
 
-### Prerequisites
-* **Python 3.11+**
-* **Ollama** installed with `qwen2.5:7b`:
+This project is powered by **Qwen 2.5 7B** running 100% locally on your machine via **Ollama** (free, private, fast inference, and zero cloud API fees).
+
+### 5.1 Download & Install Ollama
+* **Windows:** Download and run [`OllamaSetup.exe`](https://ollama.com/download/windows). Follow the guided installer. After setup, Ollama automatically runs in the background system tray.
+* **macOS:** Download the installer from [`ollama.com/download/mac`](https://ollama.com/download/mac) or install via Homebrew:
   ```bash
-  ollama run qwen2.5:7b
+  brew install ollama
   ```
+* **Linux:** Install via the official one-line script:
+  ```bash
+  curl -fsSL https://ollama.com/install.sh | sh
+  ```
+
+### 5.2 Verify Ollama Installation
+Open your terminal (PowerShell, Command Prompt, or bash) and verify the installation:
+```bash
+ollama --version
+```
+*(Ollama automatically initializes its local REST server at `http://localhost:11434`)*
+
+### 5.3 Download / Pull the Qwen 2.5 7B Model
+Download the 4-bit quantized model weights (~4.7 GB), which are optimized for 8 GB VRAM GPUs like the RTX 4060:
+```bash
+ollama pull qwen2.5:7b
+```
+To confirm the model has downloaded successfully:
+```bash
+ollama list
+```
+*(You will see `qwen2.5:7b` listed with size ~4.7 GB)*
+
+### 5.4 Test Run the Model Locally
+Run an interactive session in your terminal to ensure the model responds:
+```bash
+ollama run qwen2.5:7b
+```
+Type any prompt (e.g. `Hello! Ready to plan travel?`), confirm the response, and exit by typing `/bye`.
+
+### 5.5 Verify GPU Acceleration (NVIDIA CUDA)
+While Ollama is running or when generating an itinerary, check that the model is loaded directly into GPU VRAM:
+```bash
+ollama ps
+```
+You will observe:
+```
+NAME          ID              SIZE      PROCESSOR    CONTEXT
+qwen2.5:7b    845dbda0ea48    4.8 GB    100% GPU     8192
+```
+`100% GPU` confirms that inference is running purely on your GPU (e.g. NVIDIA RTX 4060) with sub-second token generation.
+
+---
+
+## 🚀 6. Project Setup & Quick Start Guide
 
 ### Step 1: Clone Repository & Create Virtual Environment
 ```bash
@@ -105,7 +152,7 @@ python -m venv .venv
 source .venv/bin/activate
 ```
 
-### Step 2: Install Dependencies
+### Step 2: Install Python Dependencies
 ```bash
 pip install -r requirements.txt
 ```
@@ -115,7 +162,7 @@ Copy `.env.example` to `.env`:
 ```bash
 copy .env.example .env
 ```
-Update your `.env` with your Neon Tech PostgreSQL connection URL:
+Ensure your `.env` contains:
 ```env
 OLLAMA_MODEL=qwen2.5:7b
 OLLAMA_BASE_URL=http://localhost:11434
@@ -124,7 +171,7 @@ OPEN_METEO_BASE_URL=https://api.open-meteo.com/v1/forecast
 ```
 
 ### Step 4: Seed the Neon PostgreSQL Database
-Run the idempotent seeding migration script to populate flights, hotels, and places into Neon Tech:
+Run the idempotent seeding migration script to populate initial flights, hotels, and attractions into Neon Tech:
 ```bash
 python -m src.database.seed_data
 ```
@@ -133,11 +180,11 @@ python -m src.database.seed_data
 ```bash
 streamlit run app.py
 ```
-Open **`http://localhost:8501`** in your browser.
+Open **`http://localhost:8501`** in your browser to start planning trips!
 
 ---
 
-## 🧪 6. Testing & Persona Validation
+## 🧪 7. Testing & Persona Validation
 
 ### Run Edge-Case Unit Tests
 Validates route unavailability, weather fallbacks, strict hotel filters, and parser resilience:
@@ -159,7 +206,7 @@ python -m tests.validate_personas
 
 ---
 
-## 📂 7. Project Structure
+## 📂 8. Project Structure
 
 ```
 .
@@ -199,12 +246,12 @@ python -m tests.validate_personas
 
 ---
 
-## 🏆 8. Evaluation Criteria Checklist
+## 🏆 9. Evaluation Criteria Checklist
 
-- [x] **Clear Problem Statement & Business Use Cases:** Documented in README and project brief.
-- [x] **Agentic AI Workflow:** Autonomous decision-making using LangChain ReAct agent graph.
-- [x] **Tool Integration:** 5 custom tools (Flights, Hotels, Places, Open-Meteo Weather, Budget).
-- [x] **SQL Database Best Practices:** Normalized tables, B-tree composite indexing, and SQLAlchemy pooling with **Neon Tech PostgreSQL**.
-- [x] **Anti-Hallucination Guardrails:** Deterministic Python budget computation preventing LLM math errors.
-- [x] **Streamlit Web Application:** Interactive dashboard, real-time step visualizer (`st.status`), Dark Mode styling, and offline downloads.
-- [x] **Code Quality & Documentation:** PEP 8 compliance, comprehensive type annotations, modular architecture, and automated test suites.
+* ✅ **Clear Problem Statement & Business Use Cases:** Thoroughly documented in README and project brief.
+* ✅ **Agentic AI Workflow:** Autonomous decision-making using LangChain ReAct agent graph with tool calling.
+* ✅ **Tool Integration:** 5 custom tools (Flights, Hotels, Places, Open-Meteo Weather, Budget).
+* ✅ **SQL Database Best Practices:** Normalized relational tables, B-tree composite indexing, and SQLAlchemy pooling with **Neon Tech PostgreSQL**.
+* ✅ **Anti-Hallucination Guardrails:** Deterministic Python budget computation preventing LLM math errors.
+* ✅ **Streamlit Web Application:** Interactive dashboard, real-time step visualizer (`st.status`), Dark Mode styling, and offline exports.
+* ✅ **Code Quality & Documentation:** PEP 8 compliance, comprehensive type annotations, modular architecture, and automated test suites.
