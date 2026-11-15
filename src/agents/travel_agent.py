@@ -41,11 +41,12 @@ class TravelPlannerAgent:
         # In-memory session message histories for multi-turn chats
         self._session_histories: Dict[str, List[BaseMessage]] = {}
 
-        # Initialize local LLM
+        # Initialize local LLM with expanded context window for multi-turn chats
         self.llm = ChatOllama(
             model=self.model_name,
             base_url=self.base_url,
             temperature=self.temperature,
+            num_ctx=8192,
         )
 
         # Assemble modern LangChain agent graph
@@ -141,13 +142,23 @@ class TravelPlannerAgent:
         error_msg = None
         final_markdown = ""
 
-        messages_to_send = self._session_histories[session_id]
+        # Prepare clean messages: for multi-turn chats, retain conversational summaries
+        # and avoid passing bloated raw tool dumps from older completed turns
+        raw_history = self._session_histories[session_id]
+        if len(raw_history) > 6:
+            clean_messages = [
+                m for m in raw_history
+                if isinstance(m, HumanMessage) or (isinstance(m, AIMessage) and not getattr(m, "tool_calls", None))
+            ]
+            messages_to_send = clean_messages if len(clean_messages) >= 2 else raw_history[-4:]
+        else:
+            messages_to_send = raw_history
 
         try:
             if step_callback:
                 step_callback("start", {"message": query_label})
 
-            result = self.agent.invoke({"messages": messages_to_send})
+            result = self.agent.invoke({"messages": messages_to_send}, config={"recursion_limit": 15})
             updated_messages = result.get("messages", [])
 
             # Save full conversation back to session history for future turns
@@ -211,23 +222,37 @@ class TravelPlannerAgent:
         origin: str,
         duration_days: int,
         budget_limit: float,
+        num_travelers: int = 1,
+        *args,
+        **kwargs,
     ) -> TravelItineraryOutput:
         """
         Parses the agent's markdown output into a validated TravelItineraryOutput Pydantic model.
+        Uses resilient multi-pattern regexes and mathematical fallbacks to guarantee non-zero,
+        realistic flight, hotel, and budget totals.
         """
+        import math
+
+        num_travelers = max(1, num_travelers)
+        nights = max(1, duration_days - 1)
+        rooms = math.ceil(num_travelers / 2)
+
+        # 1. Title
         title_match = re.search(r"^#\s+(.+)$", raw_markdown, re.MULTILINE)
         title = title_match.group(1).strip() if title_match else f"Your {duration_days}-Day Trip to {destination}"
 
+        # 2. Resilient Flight Parsing
         flight = None
+        # Pattern handles: - **IndiGo (FL0019)** – ₹5,918 OR - **IndiGo** (FL0019) – ₹5,918 OR - IndiGo (FL0019) - 5918
         flight_match = re.search(
-            r"Flight Selected:.*?\n- \*\*([^*]+)\*\*\s*\(([^)]+)\)\s*[–-]\s*₹?([\d,]+)",
+            r"Flight Selected:.*?\n[-*]\s*\**([^*()]+?)(?:\s*\(([^)]+)\))?\**\s*[–-]\s*₹?([\d,]+)",
             raw_markdown,
             re.DOTALL,
         )
         if flight_match:
             try:
                 airline = flight_match.group(1).strip()
-                fid = flight_match.group(2).strip()
+                fid = flight_match.group(2).strip() if flight_match.group(2) else "Direct"
                 fare = float(flight_match.group(3).replace(",", ""))
                 flight = SelectedFlight(
                     airline=airline,
@@ -241,44 +266,94 @@ class TravelPlannerAgent:
             except Exception:
                 pass
 
+        # If flight was not extracted from markdown, query database for route fallback
+        if not flight:
+            available_flights = db_service.get_flights(source=origin, destination=destination)
+            if available_flights:
+                best_flight = available_flights[0]
+                flight = SelectedFlight(
+                    airline=best_flight.airline,
+                    flight_id=best_flight.flight_id,
+                    origin=origin,
+                    destination=destination,
+                    departure_time=best_flight.departure_time,
+                    arrival_time=best_flight.arrival_time,
+                    fare=best_flight.price,
+                    why_selected="Selected best available flight from database catalog.",
+                )
+
+        # 3. Resilient Hotel Parsing
         hotel = None
+        # Pattern handles: - **Royal Heritage** (₹6,303/night, 5-star) OR - **Royal Heritage** (5-star, ₹6,303/night)
         hotel_match = re.search(
-            r"Hotel Booked:.*?\n- \*\*([^*]+)\*\*\s*\(₹?([\d,]+)/night,\s*(\d+)-star\)",
+            r"Hotel Booked:.*?\n[-*]\s*\**([^*()]+?)\**\s*\((?:₹?([\d,]+)/night,\s*(\d+)[- ]star|(\d+)[- ]star,\s*₹?([\d,]+)/night)\)",
             raw_markdown,
             re.DOTALL,
         )
         if hotel_match:
             try:
                 hname = hotel_match.group(1).strip()
-                rate = float(hotel_match.group(2).replace(",", ""))
-                stars = int(hotel_match.group(3))
-                nights = max(1, duration_days - 1)
+                rate_str = hotel_match.group(2) or hotel_match.group(5)
+                star_str = hotel_match.group(3) or hotel_match.group(4)
+                rate = float(rate_str.replace(",", ""))
+                stars = int(star_str)
                 hotel = SelectedHotel(
                     hotel_name=hname,
                     stars=stars,
                     price_per_night=rate,
-                    total_price=rate * nights,
+                    total_price=rate * nights * rooms,
                 )
             except Exception:
                 pass
 
-        flight_cost = flight.fare if flight else 0.0
-        hotel_cost = hotel.total_price if hotel else 0.0
-        total_match = re.search(r"\*\*Total Cost:\s*₹?([\d,]+)\*\*", raw_markdown)
-        total_cost = (
-            float(total_match.group(1).replace(",", ""))
-            if total_match
-            else (flight_cost + hotel_cost + 2500)
-        )
-        local_cost = max(0.0, total_cost - flight_cost - hotel_cost)
+        # If hotel was not extracted from markdown, query database for city fallback
+        if not hotel:
+            available_hotels = db_service.get_hotels(city=destination)
+            if available_hotels:
+                best_hotel = available_hotels[0]
+                hotel = SelectedHotel(
+                    hotel_name=best_hotel.name,
+                    stars=best_hotel.stars,
+                    price_per_night=best_hotel.price_per_night,
+                    total_price=best_hotel.price_per_night * nights * rooms,
+                    amenities=best_hotel.amenities,
+                    why_selected="Selected top recommended hotel from database catalog.",
+                )
+
+        # 4. Resilient Budget Extraction & Mathematical Validation
+        flight_cost_per_person = flight.fare if flight else 0.0
+        calculated_flight_total = flight_cost_per_person * num_travelers
+
+        hotel_nightly_rate = hotel.price_per_night if hotel else 0.0
+        calculated_hotel_total = hotel_nightly_rate * nights * rooms
+
+        calculated_local_total = 1000.0 * duration_days * num_travelers
+
+        # Check if text contained explicit budget figures
+        f_cost_match = re.search(r"Flight[s]?:\s*₹?\s*([\d,]+)", raw_markdown)
+        h_cost_match = re.search(r"(?:Hotel|Accommodation)[^:\n]*:\s*₹?\s*([\d,]+)", raw_markdown)
+        l_cost_match = re.search(r"(?:Food|Travel|Local)[^:\n]*:\s*₹?\s*([\d,]+)", raw_markdown)
+        total_match = re.search(r"Total(?:\s*Cost|\s*Budget)?:\s*\**₹?\s*([\d,]+)\**", raw_markdown)
+
+        text_flight = float(f_cost_match.group(1).replace(",", "")) if f_cost_match else None
+        text_hotel = float(h_cost_match.group(1).replace(",", "")) if h_cost_match else None
+        text_local = float(l_cost_match.group(1).replace(",", "")) if l_cost_match else None
+        text_total = float(total_match.group(1).replace(",", "")) if total_match else None
+
+        # Prioritize accurate text values, but mathematically enforce non-zero sanity
+        final_flight_cost = text_flight if (text_flight is not None and text_flight > 0) else calculated_flight_total
+        final_hotel_cost = text_hotel if (text_hotel is not None and text_hotel > 0) else calculated_hotel_total
+        final_local_cost = text_local if (text_local is not None and text_local > 0) else calculated_local_total
+
+        final_grand_total = text_total if (text_total is not None and text_total >= (final_flight_cost + final_hotel_cost)) else (final_flight_cost + final_hotel_cost + final_local_cost)
 
         budget = BudgetBreakdown(
-            flight_expense=flight_cost,
-            hotel_expense=hotel_cost,
-            local_expenses=local_cost,
-            total_budget=total_cost,
-            is_within_budget=total_cost <= budget_limit,
-            budget_notes=f"Target Budget: ₹{budget_limit:,.0f}",
+            flight_expense=final_flight_cost,
+            hotel_expense=final_hotel_cost,
+            local_expenses=final_local_cost,
+            total_budget=final_grand_total,
+            is_within_budget=final_grand_total <= budget_limit,
+            budget_notes=f"Target Budget: ₹{budget_limit:,.0f} for {num_travelers} traveler(s)",
         )
 
         daily_plans: List[DailyPlan] = []
