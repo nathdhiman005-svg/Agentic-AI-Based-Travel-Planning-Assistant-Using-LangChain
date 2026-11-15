@@ -1,0 +1,41 @@
+# Environment secrets & credentials
+.env
+.env.local
+
+# Virtual environment
+.venv/
+venv/
+env/
+ENV/
+
+# Project documentation & user prompt files (requested exclusions)
+implementation_plan.md
+Project Title.docx
+project title.docx
+*.docx
+
+# Data sources folder contents (requested exclusion)
+data sources/*
+!data sources/.gitkeep
+
+# Python cache & bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+
+# Local SQLite databases
+*.db
+*.sqlite3
+
+# Operating System files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# IDE / Editor folders
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
