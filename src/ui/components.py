@@ -39,7 +39,7 @@ def render_flight_card(flight: Optional[SelectedFlight]):
     """Renders a modern airline ticket summary card."""
     st.markdown("### ✈️ Flight Selection")
     if not flight:
-        st.info("No specific flight was required or selected for this itinerary.")
+        st.info("ℹ️ No direct flight available in the catalog for this specific route. Travelers can consider train, road, or connecting transit via a nearby hub.")
         return
 
     col1, col2, col3 = st.columns([2, 2, 1.5])
@@ -60,7 +60,7 @@ def render_hotel_card(hotel: Optional[SelectedHotel]):
     """Renders an accommodation card with stars, tariffs, and amenities."""
     st.markdown("### 🏨 Accommodation Booked")
     if not hotel:
-        st.info("No specific hotel was booked for this itinerary.")
+        st.info("ℹ️ No specific hotel matched the strict filters in our catalog. Try relaxing star rating or price limits in preferences.")
         return
 
     stars_str = "⭐" * hotel.stars
