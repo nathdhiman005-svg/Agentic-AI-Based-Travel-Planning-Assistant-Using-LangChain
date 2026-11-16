@@ -10,6 +10,25 @@ An autonomous, multi-tool **Agentic AI Travel Assistant** built with **LangChain
 
 ---
 
+### ⚠️ CRITICAL NOTICE: Local LLM Required (Please Read Before Testing)
+
+[![Deployment Notice: Local LLM Required](https://img.shields.io/badge/%E2%9A%A0%EF%B8%8F%20DEPLOYMENT%20NOTICE-LOCAL%20LLM%20REQUIRED%20(OLLAMA)-critical?style=for-the-badge&logo=ollama&logoColor=white)](#-5-ollama-installation--local-model-setup)
+
+
+> **Cloud Deployments (Streamlit Community Cloud / Render) will NOT generate itineraries out of the box.**  
+> WanderWise is powered by a **local open-source LLM (`qwen2.5:7b` via Ollama on `localhost:11434`)** for 100% data privacy and zero API costs, rather than a commercial cloud API. Because cloud servers cannot connect to your personal PC's `localhost`, a cloud deployment cannot invoke the local agent.  
+>  
+> 💻 **To test and experience the full agentic AI workflow, please run WanderWise locally on your computer:**  
+> - 🦙 **Step 1:** Follow the [**Ollama Installation & Model Setup Guide**](#-5-ollama-installation--local-model-setup) to start Ollama and pull `qwen2.5:7b`.  
+> - 🚀 **Step 2:** Follow the [**Project Setup & Quick Start Guide**](#-6-project-setup--quick-start-guide) to launch the Streamlit dashboard on `localhost:8501`.
+
+| 🚨 Alert | **Local LLM Configuration Details** |
+| :--- | :--- |
+| **Why Cloud Fails** | Cloud hosting instances cannot reach `localhost:11434` on your local PC. |
+| **How to Run** | Clone this repository, start Ollama with `qwen2.5:7b`, and run `streamlit run app.py`. See [**Setup Guide**](#-6-project-setup--quick-start-guide). |
+
+---
+
 ## 📌 1. Project Overview & Problem Statement
 
 Planning a trip requires coordinating flights, accommodations, sightseeing agendas, and daily budgets while navigating real-world constraints such as changing weather, transit times, and financial ceilings. Travelers often juggle multiple aggregators, leading to suboptimal or fragmented plans.
